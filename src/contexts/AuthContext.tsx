@@ -65,42 +65,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     selectedModule: UserModule
   ) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) throw error;
-    if (!data.user) throw new Error('Usuário não autenticado');
-
-    const tableName =
-      selectedModule === 'financeiro'
-        ? 'users_financeiro'
-        : 'users_academico';
-
-    const { data: profile, error: selectError } = await supabase
-      .from(tableName)
-      .select('*')
-      .eq('id', data.user.id)
-      .maybeSingle();
-
-    if (selectError) throw selectError;
-
-    // 🔹 cria perfil do módulo se não existir
-    if (!profile) {
-      const fullName = data.user.user_metadata?.full_name || 'Usuário';
-
-      const { error: insertError } = await supabase.from(tableName).insert({
-        id: data.user.id,
-        email: data.user.email,
-        full_name: fullName,
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      if (insertError) throw insertError;
-    }
+      if (error) {
+        if (error.message.includes('Invalid login credentials')) {
+          throw new Error('Email ou senha incorretos');
+        }
+        if (error.message.includes('Email not confirmed')) {
+          throw new Error('Por favor, confirme seu email antes de fazer login');
+        }
+        throw new Error('Erro ao fazer login. Tente novamente.');
+      }
 
-    setModule(selectedModule);
-    localStorage.setItem('userModule', selectedModule);
+      if (!data.user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const tableName =
+        selectedModule === 'financeiro'
+          ? 'users_financeiro'
+          : 'users_academico';
+
+      const { data: profile, error: selectError } = await supabase
+        .from(tableName)
+        .select('*')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (selectError) {
+        console.error('Erro ao buscar perfil:', selectError);
+        throw new Error('Erro ao carregar perfil do usuário');
+      }
+
+      if (!profile) {
+        const fullName = data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'Usuário';
+
+        const { error: insertError } = await supabase.from(tableName).insert({
+          id: data.user.id,
+          email: data.user.email,
+          full_name: fullName,
+        });
+
+        if (insertError) {
+          console.error('Erro ao criar perfil:', insertError);
+
+          if (insertError.message.includes('duplicate key')) {
+            throw new Error('Este usuário já possui um perfil neste módulo');
+          }
+
+          throw new Error('Erro ao criar perfil do usuário. Entre em contato com o suporte.');
+        }
+      }
+
+      setModule(selectedModule);
+      localStorage.setItem('userModule', selectedModule);
+    } catch (error: any) {
+      console.error('Erro no signIn:', error);
+      throw error;
+    }
   };
 
   // =========================
@@ -112,34 +138,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName: string,
     selectedModule: UserModule
   ) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
         },
-      },
-    });
+      });
 
-    if (error) throw error;
-    if (!data.user) throw new Error('Falha ao criar usuário');
+      if (error) {
+        if (error.message.includes('User already registered')) {
+          throw new Error('Este email já está cadastrado');
+        }
+        if (error.message.includes('Password should be at least')) {
+          throw new Error('A senha deve ter pelo menos 6 caracteres');
+        }
+        throw new Error('Erro ao criar conta. Tente novamente.');
+      }
 
-    const tableName =
-      selectedModule === 'financeiro'
-        ? 'users_financeiro'
-        : 'users_academico';
+      if (!data.user) {
+        throw new Error('Falha ao criar usuário');
+      }
 
-    const { error: insertError } = await supabase.from(tableName).insert({
-      id: data.user.id,
-      email: data.user.email,
-      full_name: fullName,
-    });
+      if (data.session) {
+        const tableName =
+          selectedModule === 'financeiro'
+            ? 'users_financeiro'
+            : 'users_academico';
 
-    if (insertError) throw insertError;
+        const { error: insertError } = await supabase.from(tableName).insert({
+          id: data.user.id,
+          email: data.user.email,
+          full_name: fullName,
+        });
 
-    setModule(selectedModule);
-    localStorage.setItem('userModule', selectedModule);
+        if (insertError) {
+          console.error('Erro ao criar perfil:', insertError);
+
+          if (insertError.message.includes('duplicate key')) {
+            throw new Error('Já existe um perfil para este usuário');
+          }
+
+          throw new Error('Erro ao criar perfil. Entre em contato com o suporte.');
+        }
+
+        setModule(selectedModule);
+        localStorage.setItem('userModule', selectedModule);
+      } else {
+        throw new Error('Conta criada! Por favor, confirme seu email antes de fazer login.');
+      }
+    } catch (error: any) {
+      console.error('Erro no signUp:', error);
+      throw error;
+    }
   };
 
   // =========================

@@ -11,28 +11,69 @@ export function LoginScreen() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const { signIn, signUp } = useAuth();
+
+  const validateEmail = (email: string) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedModule) return;
 
     setError('');
+    setSuccess('');
+
+    if (!validateEmail(email)) {
+      setError('Por favor, insira um email válido');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
+
+    if (isSignUp && fullName.trim().length < 3) {
+      setError('Nome completo deve ter pelo menos 3 caracteres');
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (isSignUp) {
-        await signUp(email, password, fullName, selectedModule);
+        await signUp(email.trim(), password, fullName.trim(), selectedModule);
+        setSuccess('Conta criada com sucesso!');
       } else {
-        await signIn(email, password, selectedModule);
+        await signIn(email.trim(), password, selectedModule);
       }
     } catch (err: any) {
       setError(err.message || 'Erro ao processar sua solicitação');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleToggleMode = () => {
+    setIsSignUp(!isSignUp);
+    setError('');
+    setSuccess('');
+    setPassword('');
+  };
+
+  const handleBackToModuleSelect = () => {
+    setSelectedModule(null);
+    setIsSignUp(false);
+    setError('');
+    setSuccess('');
+    setEmail('');
+    setPassword('');
+    setFullName('');
   };
 
   if (!selectedModule) {
@@ -85,11 +126,7 @@ export function LoginScreen() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
         <button
-          onClick={() => {
-            setSelectedModule(null);
-            setIsSignUp(false);
-            setError('');
-          }}
+          onClick={handleBackToModuleSelect}
           className="mb-6 text-slate-600 hover:text-slate-800 flex items-center space-x-2"
         >
           <span>←</span>
@@ -165,6 +202,12 @@ export function LoginScreen() {
               </div>
             )}
 
+            {success && (
+              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+                {success}
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -181,11 +224,9 @@ export function LoginScreen() {
 
           <div className="mt-6 text-center">
             <button
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError('');
-              }}
-              className="text-slate-600 hover:text-slate-800 text-sm"
+              onClick={handleToggleMode}
+              disabled={loading}
+              className="text-slate-600 hover:text-slate-800 text-sm disabled:opacity-50"
             >
               {isSignUp ? 'Já tem uma conta? Entrar' : 'Primeiro acesso? Criar conta'}
             </button>
